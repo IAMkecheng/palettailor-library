@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Test Palettailor</title>
+    <script type="text/javascript" src="./d3.v4.min.js"></script>
+    <script type="text/javascript" src="./d3.color.min.js"></script>
+    <script type="text/javascript" src="./palettailor.js"></script>
+</head>
+
+<body>
+    <input type="button" onclick="reColor()" value="reColoring">
+    <svg id="scatterplotSvg"></svg>
+    <svg id="lineSvg"></svg>
+    <svg id="barSvg"></svg>
+</body>
+
+<script>
+    function drawScatterplot(palette, data, xScale, yScale) {
+        let scatterplot_svg = d3.select("#scatterplotSvg")
+            .attr("width", SVGWIDTH).attr("height", SVGHEIGHT);
+        let scatterplot = scatterplot_svg.style("background-color", bgcolor).append("g")
+            .attr("transform", "translate(" + svg_margin.left + "," + svg_margin.top + ")");
+        // draw dots
+        let dots = scatterplot.append("g").selectAll(".dot")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "dot")
+            .attr("r", radius)
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y)
+            .attr("fill", d => palette[d.label]);
+        // add the x Axis
+        scatterplot.append("g")
+            .attr("transform", "translate(0," + svg_height + ")")
+            .call(d3.axisBottom(xScale));//.tickFormat("")
+
+        // add the y Axis
+        scatterplot.append("g")
+            .call(d3.axisLeft(yScale));
+    }
+</script>
+
+<script>
+    let svg_margin = {
+        top: 20,
+        right: 20,
+        bottom: 20,
+        left: 20
+    },
+        radius = 4,
+        SVGWIDTH = 400,
+        SVGHEIGHT = 400;
+    let svg_width = SVGWIDTH - svg_margin.left - svg_margin.right,
+        svg_height = SVGHEIGHT - svg_margin.top - svg_margin.bottom;
+    let bgcolor = "#fff"
+    // load data
+    function reColor() {
+        d3.csv("./data/scatterplot.csv", function (data) {
+            let xValue = d => +d.x, yValue = d => +d.y,
+                xScale = d3.scaleLinear().range([0, svg_width]), // value -> display
+                xMap = function (d) {
+                    return xScale(xValue(d));
+                }, // data -> display
+                xAxis = d3.axisBottom().scale(xScale).ticks(0),
+                yScale = d3.scaleLinear().range([svg_height, 0]), // value -> display
+                yMap = function (d) {
+                    return yScale(yValue(d));
+                }, // data -> display
+                yAxis = d3.axisLeft().scale(yScale).ticks(0);
+            xScale.domain(d3.extent(data, xValue));
+            yScale.domain(d3.extent(data, yValue));
+
+            let scaled_data = []
+            for (let d of data) {
+                scaled_data.push({ "x": xScale(xValue(d)), "y": yScale(yValue(d)), "label": d.label })
+            }
+
+            let palettailor = new Palettailor(scaled_data, [1, 1, 1], svg_width, svg_height, bgcolor),
+                palette = palettailor.calc();
+
+            drawScatterplot(palette, scaled_data, xScale, yScale);
+
+        })
+    }
+    reColor()
+
+</script>
+
+</html>
