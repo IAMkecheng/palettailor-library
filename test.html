@@ -13,7 +13,6 @@
     <input type="button" onclick="reColor()" value="reColoring">
     <svg id="scatterplotSvg"></svg>
     <svg id="lineSvg"></svg>
-    <svg id="barSvg"></svg>
 </body>
 
 <script>
@@ -40,6 +39,69 @@
         scatterplot.append("g")
             .call(d3.axisLeft(yScale));
     }
+    function drawLinechart(palette, data, xScale, yScale) {
+        let linechart_svg = d3.select("#lineSvg")
+            .attr("width", SVGWIDTH).attr("height", SVGHEIGHT);
+        let linechart = linechart_svg.style("background-color", bgcolor)
+            .append("g")
+            .attr("transform", "translate(" + svg_margin.left + "," + svg_margin.top + ")");
+
+        // define the line
+        let valueline = d3.line()
+            .x(d => d.x)
+            .y(d => d.y).curve(d3.curveCatmullRom);
+        console.log(data, palette);
+        // Add the valueline path.
+        linechart.selectAll('path')
+            .data(data).enter().append("path")
+            .attr("d", function (d) {
+                return valueline(d.p);
+            })
+            .attr("class", "linechart")
+            .attr("fill", "none")
+            .attr("stroke", d => palette[d.id])
+            .style("stroke-width", radius)
+            .attr("item-color", d => palette[d.id])
+
+        // Add the X Axis
+        linechart.append("g")
+            .attr("transform", "translate(0," + svg_height + ")")
+            .call(d3.axisBottom(xScale).tickFormat(""));
+
+        // Add the Y Axis
+        linechart.append("g")
+            .call(d3.axisLeft(yScale).tickFormat(""));
+    }
+    function drawBarchart(palette, data, xScale, yScale) {
+        let barchart_svg = d3.select("#barSvg")
+            .attr("width", SVGWIDTH).attr("height", SVGHEIGHT);
+        let barchart = barchart_svg.style("background-color", bgcolor)
+            .append("g")
+            .attr("transform", "translate(" + svg_margin.left + "," + svg_margin.top + ")");
+
+        // add the x Axis
+        barchart.append("g")
+            .attr("transform", "translate(0," + svg_height + ")")
+            .call(d3.axisBottom(xScale).tickFormat(""));
+
+        // add the y Axis
+        barchart.append("g")
+            .call(d3.axisLeft(yScale).tickFormat(""));
+
+        barchart.selectAll("bars")
+            .data(data)
+            .enter().append("rect")
+            .attr("class", "bars")
+            .attr("fill", d => palette[d.label])
+            .attr("x", d => d.x)
+            .attr("width", xScale.bandwidth())
+            .attr("y", d => d.y)
+            .attr("height", function (d) {
+                return svg_height - d.y;
+            })
+            .attr("rx", 10).attr("ry", 10)
+            .attr("item-color", d => palette[d.label])
+    }
 </script>
 
 <script>
@@ -57,9 +119,9 @@
     let bgcolor = "#fff"
     // load data
     function reColor() {
+        let xValue = d => +d.x, yValue = d => +d.y;
         d3.csv("./data/scatterplot.csv", function (data) {
-            let xValue = d => +d.x, yValue = d => +d.y,
-                xScale = d3.scaleLinear().range([0, svg_width]), // value -> display
+            let xScale = d3.scaleLinear().range([0, svg_width]), // value -> display
                 xMap = function (d) {
                     return xScale(xValue(d));
                 }, // data -> display
@@ -83,6 +145,53 @@
             drawScatterplot(palette, scaled_data, xScale, yScale);
 
         })
+
+        d3.csv("./data/linechart.csv", function (data) {
+            let xScale = d3.scaleLinear().range([0, svg_width]), // value -> display
+                xMap = function (d) {
+                    return xScale(xValue(d));
+                }, // data -> display
+                xAxis = d3.axisBottom().scale(xScale).ticks(0),
+                yScale = d3.scaleLinear().range([svg_height, 0]), // value -> display
+                yMap = function (d) {
+                    return yScale(yValue(d));
+                }, // data -> display
+                yAxis = d3.axisLeft().scale(yScale).ticks(0);
+            xScale.domain(d3.extent(data, xValue));
+            yScale.domain(d3.extent(data, yValue));
+
+            let linechart_source_data = [], label_to_class = {}, count = 0
+            for (let d of data) {
+                if (label_to_class[d.label] === undefined) label_to_class[d.label] = count++;
+                if (linechart_source_data[label_to_class[d.label]] == undefined) {
+                    linechart_source_data[label_to_class[d.label]] = { p: [], id: d.label };
+                }
+                linechart_source_data[label_to_class[d.label]].p.push({ x: xScale(xValue(d)), y: yScale(yValue(d)) });
+            }
+            //interpolate line chart data
+            let interpolated_linechart_data = [];
+            let interpolated_points_step = 20;
+            for (let line of linechart_source_data) {
+                let line_path = line.p;
+                for (let i = 0; i < line_path.length - 1; i++) {
+                    let x_0 = line_path[i].x, x_1 = line_path[i + 1].x;
+                    let y_0 = line_path[i].y, y_1 = line_path[i + 1].y;
+                    let interpolated_points_num = Math.floor(Math.sqrt((xScale(x_1) - xScale(x_0)) * (xScale(x_1) - xScale(x_0)) + (yScale(y_1) - yScale(y_0)) * (yScale(y_1) - yScale(y_0))) / interpolated_points_step);
+                    interpolated_points_num = (interpolated_points_num > 0) ? interpolated_points_num : 1;
+                    for (let j = 0; j < interpolated_points_num; j++) {
+                        interpolated_linechart_data.push({ label: line.id, x: (x_1 - x_0) * j / interpolated_points_num + x_0, y: (y_1 - y_0) * j / interpolated_points_num + y_0 });
+                    }
+                }
+                interpolated_linechart_data.push({ label: line.id, x: line_path[line_path.length - 1].x, y: line_path[line_path.length - 1].y });
+            }
+
+            let palettailor = new Palettailor(interpolated_linechart_data, [1, 1, 1], svg_width, svg_height, bgcolor),
+                palette = palettailor.calc();
+
+            drawLinechart(palette, linechart_source_data, xScale, yScale);
+
+        })
+
     }
     reColor()
 
